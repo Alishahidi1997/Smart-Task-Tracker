@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ws smoke test</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 1rem; }
+    pre { background: #111; color: #cfc; padding: 0.75rem; overflow: auto; max-height: 420px; font-size: 12px; }
+    button { margin-right: 0.35rem; margin-bottom: 0.35rem; }
+    .row { margin: 0.5rem 0; }
+    input[type="text"] { width: 280px; }
+  </style>
+</head>
+<body>
+  <p>
+    Browsers don’t speak WebSocket if you type <code>ws://...</code> in the bar (that’s plain HTTP).
+    This page uses <code>new WebSocket()</code> instead.
+  </p>
+  <div class="row">
+    <label>ws url <input type="text" id="url" value="ws://127.0.0.1:3334" /></label>
+    <button type="button" id="btnConnect">connect</button>
+    <button type="button" id="btnClose">disconnect</button>
+  </div>
+  <div class="row">
+    <button type="button" data-cmd='{"cmd":"reset"}'>reset</button>
+    <button type="button" data-cmd='{"cmd":"fail","kind":"crash","serviceId":"payments"}'>crash payments</button>
+    <button type="button" data-cmd='{"cmd":"fail","kind":"latency_spike","serviceId":"users-db"}'>db latency</button>
+    <button type="button" data-cmd='{"cmd":"fail","kind":"overload"}'>overload</button>
+    <button type="button" data-cmd='{"cmd":"fail","kind":"cascade"}'>cascade</button>
+  </div>
+  <pre id="log"></pre>
+  <script>
+    let sock = null;
+    const logEl = document.getElementById("log");
+    let lines = 0;
+    function log(s) {
+      if (lines++ > 200) { logEl.textContent = ""; lines = 0; }
+      logEl.textContent += s + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    document.getElementById("btnConnect").onclick = () => {
+      const u = document.getElementById("url").value.trim();
+      if (sock) { try { sock.close(); } catch (e) {} }
+      sock = new WebSocket(u);
+      sock.onopen = () => log("OPEN");
+      sock.onclose = () => log("CLOSED");
+      sock.onerror = () => log("ERROR (see devtools network)");
+      sock.onmessage = (ev) => {
+        let shorty = ev.data;
+        if (shorty.length > 500) shorty = shorty.slice(0, 500) + "…";
+        log(shorty);
+      };
+    };
+    document.getElementById("btnClose").onclick = () => {
+      if (sock) sock.close();
+    };
+    document.querySelectorAll("button[data-cmd]").forEach((b) => {
+      b.onclick = () => {
+        if (!sock || sock.readyState !== 1) {
+          log("not connected");
+          return;
+        }
+        sock.send(b.getAttribute("data-cmd"));
+      };
+    });
+  </script>
+</body>
+</html>
