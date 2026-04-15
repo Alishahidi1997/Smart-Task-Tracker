@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Task
-from app.schemas import TaskCreate, TaskOut, TaskUpdate
+from app.schemas import Status, TaskCreate, TaskOut, TaskUpdate
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -23,8 +25,26 @@ def create_task(payload: TaskCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[TaskOut])
-def list_tasks(db: Session = Depends(get_db)):
-    return db.query(Task).order_by(Task.id.desc()).all()
+def list_tasks(
+    status_filter: Status | None = Query(default=None, alias="status"),
+    due_before: datetime | None = Query(default=None),
+    due_after: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Task)
+
+    if status_filter is not None:
+        q = q.filter(Task.status == status_filter)
+
+    if due_before is not None:
+        q = q.filter(Task.due_date.is_not(None))
+        q = q.filter(Task.due_date <= due_before)
+
+    if due_after is not None:
+        q = q.filter(Task.due_date.is_not(None))
+        q = q.filter(Task.due_date >= due_after)
+
+    return q.order_by(Task.id.desc()).all()
 
 
 @router.get("/{task_id}", response_model=TaskOut)
