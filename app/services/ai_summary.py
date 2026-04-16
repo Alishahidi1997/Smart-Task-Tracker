@@ -13,25 +13,14 @@ def pick_mode():
     return "mock", ""
 
 
-def mock_summary(tasks: list[Task]) -> str:
-    if not tasks:
-        return "No completed tasks in the list yet. Mark a few as done and try again."
-
-    titles = [t.title for t in tasks[:15]]
-    joined = ", ".join(titles)
-    n = len(tasks)
-    return (
-        f"You have {n} completed task(s) on file. Recent ones include: {joined}. "
-        "Keep shipping — this is the mock summary (no API key set)."
-    )
-
 
 def openai_summary(tasks: list[Task], api_key: str) -> str:
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
-
     lines = []
     for t in tasks[:40]:
         lines.append(f"- {t.title} (id {t.id})")
+
+
 
     user_block = "Completed tasks:\n" + ("\n".join(lines) if lines else "(none)")
 
@@ -40,9 +29,8 @@ def openai_summary(tasks: list[Task], api_key: str) -> str:
             "role": "system",
             "content": "You write short daily productivity summaries. 2-4 sentences, friendly, no markdown.",
         },
-        {"role": "user", "content": user_block + "\n\nWrite the daily summary."},
+        {"role": "user", "content": user_block + "\nWrite the daily summary."},
     ]
-
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
         "Authorization": "Bearer " + api_key,
@@ -65,6 +53,4 @@ def openai_summary(tasks: list[Task], api_key: str) -> str:
 
 def build_daily_summary(tasks: list[Task]) -> tuple[str, str]:
     mode, key = pick_mode()
-    if mode == "mock":
-        return mock_summary(tasks), "mock"
     return openai_summary(tasks, key), "openai"
