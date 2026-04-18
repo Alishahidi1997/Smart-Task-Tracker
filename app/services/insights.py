@@ -4,7 +4,7 @@
 def _bucket_for_task(task, guess_fn):
     if getattr(task, "category", None):
         return task.category
-    return guess_fn(task.title, task.description or "")
+    return guess_fn(task.title, task.description or "", getattr(task, "due_date", None))
 
 
 def build_productivity_insights(done_tasks, guess_fn):
