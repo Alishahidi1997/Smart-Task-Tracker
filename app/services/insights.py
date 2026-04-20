@@ -1,4 +1,5 @@
 # productivity numbers from done tasks (needs completed_at filled when they hit done)
+from datetime import datetime, timezone
 
 
 def _bucket_for_task(task, guess_fn):
@@ -62,3 +63,64 @@ def build_productivity_insights(done_tasks, guess_fn):
         narrative = "Not enough completed tasks with timestamps yet. Mark tasks done and try again."
 
     return {"buckets": rows, "narrative": narrative}
+
+
+def _as_utc(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _priority_label(hours_overdue: float) -> str:
+    if hours_overdue >= 72:
+        return "high"
+    if hours_overdue >= 24:
+        return "medium"
+    return "low"
+
+
+def build_priority_suggestions(tasks, guess_fn):
+    now = datetime.now(timezone.utc)
+    overdue = []
+    for t in tasks:
+        due_utc = _as_utc(getattr(t, "due_date", None))
+        if due_utc is None:
+            continue
+        if due_utc >= now:
+            continue
+        if getattr(t, "status", "") == "done":
+            continue
+
+        overdue_hours = round((now - due_utc).total_seconds() / 3600.0, 2)
+        overdue.append(
+            {
+                "id": t.id,
+                "title": t.title,
+                "status": t.status,
+                "due_date": due_utc.isoformat(),
+                "category": _bucket_for_task(t, guess_fn),
+                "hours_overdue": overdue_hours,
+                "priority": _priority_label(overdue_hours),
+            }
+        )
+
+    overdue.sort(key=lambda row: row["due_date"])
+    top = overdue[:20]
+
+    if not top:
+        suggestion = "No overdue tasks right now. You're on track."
+    else:
+        high = sum(1 for t in top if t["priority"] == "high")
+        suggestion = (
+            f"Focus on the oldest overdue tasks first. "
+            f"You have {len(top)} overdue task(s) in this view, including {high} high-priority item(s)."
+        )
+
+    return {
+        "generated_at": now.isoformat(),
+        "total_overdue": len(overdue),
+        "suggestion": suggestion,
+        "tasks": top,
+    }
