@@ -24,6 +24,11 @@ function App() {
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [creating, setCreating] = useState(false);
+  const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<number | null>(null);
+  const [filterStatus, setFilterStatus] = useState<"" | TaskStatus>("");
+  const [filterDueBefore, setFilterDueBefore] = useState("");
+  const [filterDueAfter, setFilterDueAfter] = useState("");
 
   const statusCount = useMemo(() => {
     return tasks.reduce(
@@ -39,7 +44,18 @@ function App() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${API_BASE_URL}/tasks`);
+      const params = new URLSearchParams();
+      if (filterStatus) {
+        params.set("status", filterStatus);
+      }
+      if (filterDueBefore) {
+        params.set("due_before", new Date(filterDueBefore).toISOString());
+      }
+      if (filterDueAfter) {
+        params.set("due_after", new Date(filterDueAfter).toISOString());
+      }
+      const query = params.toString();
+      const response = await fetch(`${API_BASE_URL}/tasks${query ? `?${query}` : ""}`);
       if (!response.ok) {
         throw new Error(`Failed to load tasks (${response.status})`);
       }
@@ -49,6 +65,44 @@ function App() {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleStatusChange(taskId: number, nextStatus: TaskStatus) {
+    setUpdatingTaskId(taskId);
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to update task (${response.status})`);
+      }
+      await loadTasks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update task");
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  }
+
+  async function handleDeleteTask(taskId: number) {
+    setDeletingTaskId(taskId);
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to delete task (${response.status})`);
+      }
+      await loadTasks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete task");
+    } finally {
+      setDeletingTaskId(null);
     }
   }
 
@@ -87,7 +141,7 @@ function App() {
 
   useEffect(() => {
     void loadTasks();
-  }, []);
+  }, [filterStatus, filterDueBefore, filterDueAfter]);
 
   return (
     <main className="app-shell">
@@ -101,6 +155,50 @@ function App() {
         <div><strong>{statusCount.todo}</strong> todo</div>
         <div><strong>{statusCount.in_progress}</strong> in progress</div>
         <div><strong>{statusCount.done}</strong> done</div>
+      </section>
+
+      <section className="panel">
+        <h2>Filters</h2>
+        <div className="filters">
+          <label>
+            Status
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as "" | TaskStatus)}
+            >
+              <option value="">All</option>
+              <option value="todo">todo</option>
+              <option value="in_progress">in_progress</option>
+              <option value="done">done</option>
+            </select>
+          </label>
+          <label>
+            Due before
+            <input
+              type="datetime-local"
+              value={filterDueBefore}
+              onChange={(e) => setFilterDueBefore(e.target.value)}
+            />
+          </label>
+          <label>
+            Due after
+            <input
+              type="datetime-local"
+              value={filterDueAfter}
+              onChange={(e) => setFilterDueAfter(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setFilterStatus("");
+              setFilterDueBefore("");
+              setFilterDueAfter("");
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
       </section>
 
       <section className="panel">
@@ -157,6 +255,25 @@ function App() {
               <small>
                 category: {task.category ?? "n/a"} | due: {task.due_date ?? "n/a"}
               </small>
+              <div className="task-actions">
+                <select
+                  value={task.status}
+                  onChange={(e) => void handleStatusChange(task.id, e.target.value as TaskStatus)}
+                  disabled={updatingTaskId === task.id}
+                >
+                  <option value="todo">todo</option>
+                  <option value="in_progress">in_progress</option>
+                  <option value="done">done</option>
+                </select>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => void handleDeleteTask(task.id)}
+                  disabled={deletingTaskId === task.id}
+                >
+                  {deletingTaskId === task.id ? "Deleting..." : "Delete"}
+                </button>
+              </div>
             </li>
           ))}
         </ul>

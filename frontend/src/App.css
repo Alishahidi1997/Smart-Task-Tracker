@@ -44,7 +44,12 @@
 .task-form input,
 .task-form textarea,
 .task-form button,
-.list-head button {
+.list-head button,
+.filters input,
+.filters select,
+.filters button,
+.task-actions select,
+.task-actions button {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   font-size: 0.95rem;
@@ -69,6 +74,19 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.filters label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
 }
 
 .task-list {
@@ -113,4 +131,14 @@
 
 .error {
   color: #dc2626;
+}
+
+.task-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.danger {
+  background: #b91c1c !important;
 }
