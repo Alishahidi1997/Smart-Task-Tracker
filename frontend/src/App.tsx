@@ -14,6 +14,40 @@ type Task = {
   category: TaskCategory | null;
 };
 
+type DailySummaryResponse = {
+  summary: string;
+  task_count: number;
+  mode: string;
+};
+
+type ProductivityBucket = {
+  category: string;
+  tasks_completed: number;
+  avg_hours_to_complete: number;
+};
+
+type ProductivityResponse = {
+  buckets: ProductivityBucket[];
+  narrative: string;
+};
+
+type PriorityTask = {
+  id: number;
+  title: string;
+  status: TaskStatus;
+  due_date: string;
+  category: string;
+  hours_overdue: number;
+  priority: "low" | "medium" | "high";
+};
+
+type PriorityResponse = {
+  generated_at: string;
+  total_overdue: number;
+  suggestion: string;
+  tasks: PriorityTask[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 function App() {
@@ -29,6 +63,11 @@ function App() {
   const [filterStatus, setFilterStatus] = useState<"" | TaskStatus>("");
   const [filterDueBefore, setFilterDueBefore] = useState("");
   const [filterDueAfter, setFilterDueAfter] = useState("");
+  const [dailySummary, setDailySummary] = useState<DailySummaryResponse | null>(null);
+  const [productivity, setProductivity] = useState<ProductivityResponse | null>(null);
+  const [priority, setPriority] = useState<PriorityResponse | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState("");
 
   const statusCount = useMemo(() => {
     return tasks.reduce(
@@ -132,6 +171,7 @@ function App() {
       setDescription("");
       setDueDate("");
       await loadTasks();
+      await loadInsights();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create task");
     } finally {
@@ -139,9 +179,43 @@ function App() {
     }
   }
 
+  async function loadInsights() {
+    setInsightsLoading(true);
+    setInsightsError("");
+    try {
+      const [summaryRes, productivityRes, priorityRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/summary/daily`),
+        fetch(`${API_BASE_URL}/insights/productivity`),
+        fetch(`${API_BASE_URL}/insights/priority`),
+      ]);
+
+      if (!summaryRes.ok) {
+        throw new Error(`Daily summary failed (${summaryRes.status})`);
+      }
+      if (!productivityRes.ok) {
+        throw new Error(`Productivity insights failed (${productivityRes.status})`);
+      }
+      if (!priorityRes.ok) {
+        throw new Error(`Priority insights failed (${priorityRes.status})`);
+      }
+
+      setDailySummary((await summaryRes.json()) as DailySummaryResponse);
+      setProductivity((await productivityRes.json()) as ProductivityResponse);
+      setPriority((await priorityRes.json()) as PriorityResponse);
+    } catch (err) {
+      setInsightsError(err instanceof Error ? err.message : "Could not load insights");
+    } finally {
+      setInsightsLoading(false);
+    }
+  }
+
   useEffect(() => {
     void loadTasks();
   }, [filterStatus, filterDueBefore, filterDueAfter]);
+
+  useEffect(() => {
+    void loadInsights();
+  }, []);
 
   return (
     <main className="app-shell">
@@ -277,6 +351,64 @@ function App() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="panel">
+        <div className="list-head">
+          <h2>Daily summary</h2>
+          <button type="button" onClick={() => void loadInsights()} disabled={insightsLoading}>
+            {insightsLoading ? "Refreshing..." : "Refresh insights"}
+          </button>
+        </div>
+        {insightsError ? <p className="error">{insightsError}</p> : null}
+        {dailySummary ? (
+          <div className="insight-block">
+            <p>{dailySummary.summary}</p>
+            <small>
+              mode: {dailySummary.mode} | based on {dailySummary.task_count} completed tasks
+            </small>
+          </div>
+        ) : (
+          <p>No summary yet.</p>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>Productivity insights</h2>
+        {productivity ? (
+          <div className="insight-block">
+            <p>{productivity.narrative}</p>
+            <ul className="simple-list">
+              {productivity.buckets.map((bucket) => (
+                <li key={bucket.category}>
+                  <strong>{bucket.category}</strong>: {bucket.tasks_completed} tasks, avg{" "}
+                  {bucket.avg_hours_to_complete}h
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p>No productivity data yet.</p>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>Priority suggestions</h2>
+        {priority ? (
+          <div className="insight-block">
+            <p>{priority.suggestion}</p>
+            <small>total overdue: {priority.total_overdue}</small>
+            <ul className="simple-list">
+              {priority.tasks.slice(0, 8).map((item) => (
+                <li key={item.id}>
+                  <strong>{item.title}</strong> ({item.priority}) - {item.hours_overdue}h overdue
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p>No overdue tasks right now.</p>
+        )}
       </section>
     </main>
   );

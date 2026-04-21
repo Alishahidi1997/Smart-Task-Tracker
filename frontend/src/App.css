@@ -142,3 +142,15 @@
 .danger {
   background: #b91c1c !important;
 }
+
+.insight-block {
+  display: grid;
+  gap: 8px;
+}
+
+.simple-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
