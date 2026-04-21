@@ -1,0 +1,116 @@
+.app-shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+  display: grid;
+  gap: 16px;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.topbar p {
+  margin: 4px 0 0;
+  color: #6b7280;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  text-align: center;
+}
+
+.task-form {
+  display: grid;
+  gap: 12px;
+}
+
+.task-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.95rem;
+}
+
+.task-form input,
+.task-form textarea,
+.task-form button,
+.list-head button {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  padding: 10px 12px;
+}
+
+.task-form textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.task-form button,
+.list-head button {
+  width: fit-content;
+  background: #111827;
+  color: #fff;
+  cursor: pointer;
+}
+
+.list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.task-list li {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.badge.todo {
+  background: #e5e7eb;
+}
+
+.badge.in_progress {
+  background: #dbeafe;
+}
+
+.badge.done {
+  background: #dcfce7;
+}
+
+.error {
+  color: #dc2626;
+}
