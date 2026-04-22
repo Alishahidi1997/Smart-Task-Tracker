@@ -1,54 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import "./App.css";
-
-type TaskStatus = "todo" | "in_progress" | "done";
-type TaskCategory = "today" | "this_week" | "routine" | "backlog";
-
-type Task = {
-  id: number;
-  title: string;
-  description: string | null;
-  status: TaskStatus;
-  due_date: string | null;
-  category: TaskCategory | null;
-};
-
-type DailySummaryResponse = {
-  summary: string;
-  task_count: number;
-  mode: string;
-};
-
-type ProductivityBucket = {
-  category: string;
-  tasks_completed: number;
-  avg_hours_to_complete: number;
-};
-
-type ProductivityResponse = {
-  buckets: ProductivityBucket[];
-  narrative: string;
-};
-
-type PriorityTask = {
-  id: number;
-  title: string;
-  status: TaskStatus;
-  due_date: string;
-  category: string;
-  hours_overdue: number;
-  priority: "low" | "medium" | "high";
-};
-
-type PriorityResponse = {
-  generated_at: string;
-  total_overdue: number;
-  suggestion: string;
-  tasks: PriorityTask[];
-};
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+import {
+  createTask,
+  deleteTask,
+  getDailySummary,
+  getPrioritySuggestions,
+  getProductivityInsights,
+  listTasks,
+  updateTaskStatus,
+} from "./api";
+import type { DailySummaryResponse, PriorityResponse, ProductivityResponse, Task, TaskStatus } from "./api";
 
 function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -83,22 +45,11 @@ function App() {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams();
-      if (filterStatus) {
-        params.set("status", filterStatus);
-      }
-      if (filterDueBefore) {
-        params.set("due_before", new Date(filterDueBefore).toISOString());
-      }
-      if (filterDueAfter) {
-        params.set("due_after", new Date(filterDueAfter).toISOString());
-      }
-      const query = params.toString();
-      const response = await fetch(`${API_BASE_URL}/tasks${query ? `?${query}` : ""}`);
-      if (!response.ok) {
-        throw new Error(`Failed to load tasks (${response.status})`);
-      }
-      const data = (await response.json()) as Task[];
+      const data = await listTasks({
+        status: filterStatus,
+        dueBefore: filterDueBefore,
+        dueAfter: filterDueAfter,
+      });
       setTasks(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -111,15 +62,9 @@ function App() {
     setUpdatingTaskId(taskId);
     setError("");
     try {
-      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextStatus }),
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to update task (${response.status})`);
-      }
+      await updateTaskStatus(taskId, nextStatus);
       await loadTasks();
+      await loadInsights();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update task");
     } finally {
@@ -131,13 +76,9 @@ function App() {
     setDeletingTaskId(taskId);
     setError("");
     try {
-      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to delete task (${response.status})`);
-      }
+      await deleteTask(taskId);
       await loadTasks();
+      await loadInsights();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete task");
     } finally {
@@ -154,19 +95,11 @@ function App() {
     setCreating(true);
     setError("");
     try {
-      const payload = {
+      await createTask({
         title: title.trim(),
         description: description.trim() || null,
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
-      };
-      const response = await fetch(`${API_BASE_URL}/tasks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
       });
-      if (!response.ok) {
-        throw new Error(`Failed to create task (${response.status})`);
-      }
       setTitle("");
       setDescription("");
       setDueDate("");
@@ -183,25 +116,14 @@ function App() {
     setInsightsLoading(true);
     setInsightsError("");
     try {
-      const [summaryRes, productivityRes, priorityRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/summary/daily`),
-        fetch(`${API_BASE_URL}/insights/productivity`),
-        fetch(`${API_BASE_URL}/insights/priority`),
+      const [summaryData, productivityData, priorityData] = await Promise.all([
+        getDailySummary(),
+        getProductivityInsights(),
+        getPrioritySuggestions(),
       ]);
-
-      if (!summaryRes.ok) {
-        throw new Error(`Daily summary failed (${summaryRes.status})`);
-      }
-      if (!productivityRes.ok) {
-        throw new Error(`Productivity insights failed (${productivityRes.status})`);
-      }
-      if (!priorityRes.ok) {
-        throw new Error(`Priority insights failed (${priorityRes.status})`);
-      }
-
-      setDailySummary((await summaryRes.json()) as DailySummaryResponse);
-      setProductivity((await productivityRes.json()) as ProductivityResponse);
-      setPriority((await priorityRes.json()) as PriorityResponse);
+      setDailySummary(summaryData);
+      setProductivity(productivityData);
+      setPriority(priorityData);
     } catch (err) {
       setInsightsError(err instanceof Error ? err.message : "Could not load insights");
     } finally {
@@ -317,7 +239,8 @@ function App() {
           </button>
         </div>
         {error ? <p className="error">{error}</p> : null}
-        {!loading && tasks.length === 0 ? <p>No tasks yet.</p> : null}
+        {loading ? <p className="muted">Loading tasks...</p> : null}
+        {!loading && tasks.length === 0 ? <p className="muted">No tasks match your filters yet.</p> : null}
         <ul className="task-list">
           {tasks.map((task) => (
             <li key={task.id}>
@@ -361,6 +284,7 @@ function App() {
           </button>
         </div>
         {insightsError ? <p className="error">{insightsError}</p> : null}
+        {insightsLoading ? <p className="muted">Loading insights...</p> : null}
         {dailySummary ? (
           <div className="insight-block">
             <p>{dailySummary.summary}</p>
@@ -388,7 +312,7 @@ function App() {
             </ul>
           </div>
         ) : (
-          <p>No productivity data yet.</p>
+          <p className="muted">No productivity data yet.</p>
         )}
       </section>
 
@@ -407,7 +331,7 @@ function App() {
             </ul>
           </div>
         ) : (
-          <p>No overdue tasks right now.</p>
+          <p className="muted">No overdue tasks right now.</p>
         )}
       </section>
     </main>
