@@ -58,10 +58,41 @@ export type WeeklyRetroResponse = {
   next_week_focus: string;
 };
 
+export type AuthUser = {
+  id: number;
+  email: string;
+};
+
+export type AuthResponse = {
+  access_token: string;
+  token_type: "bearer";
+  user: AuthUser;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+const TOKEN_KEY = "smart_tracker_token";
+
+let authToken = localStorage.getItem(TOKEN_KEY) ?? "";
+
+export function setAuthToken(token: string) {
+  authToken = token;
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+}
+
+export function hasAuthToken() {
+  return Boolean(authToken);
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, init);
+  const headers = new Headers(init?.headers ?? {});
+  if (authToken) {
+    headers.set("Authorization", `Bearer ${authToken}`);
+  }
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   if (!response.ok) {
     throw new Error(`${init?.method ?? "GET"} ${path} failed (${response.status})`);
   }
@@ -122,4 +153,24 @@ export async function getPrioritySuggestions(): Promise<PriorityResponse> {
 
 export async function getWeeklyRetro(): Promise<WeeklyRetroResponse> {
   return request<WeeklyRetroResponse>("/summary/weekly-retro");
+}
+
+export async function register(email: string, password: string): Promise<AuthResponse> {
+  return request<AuthResponse>("/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  return request<AuthResponse>("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function getMe(): Promise<AuthUser> {
+  return request<AuthUser>("/auth/me");
 }

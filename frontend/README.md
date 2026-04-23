@@ -36,8 +36,16 @@ npm run build
 
 ## Features in this UI
 
+- Login/register with JWT auth
+- Logout and per-user data isolation
 - Task create/list/update/delete
 - Filters by status and due date window
 - Daily AI summary panel
 - Productivity insights panel
 - Priority suggestions panel
+- Weekly retro panel
+
+## Demo account
+
+- Email: `demo@smarttracker.local`
+- Password: `demo1234`

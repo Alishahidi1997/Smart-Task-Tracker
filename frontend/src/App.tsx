@@ -2,16 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import "./App.css";
 import {
+  getMe,
+  hasAuthToken,
   createTask,
   deleteTask,
   getDailySummary,
   getWeeklyRetro,
   getPrioritySuggestions,
   getProductivityInsights,
+  login,
   listTasks,
+  register,
+  setAuthToken,
   updateTaskStatus,
 } from "./api";
 import type {
+  AuthUser,
   DailySummaryResponse,
   PriorityResponse,
   ProductivityResponse,
@@ -39,6 +45,12 @@ function App() {
   const [priority, setPriority] = useState<PriorityResponse | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authEmail, setAuthEmail] = useState("demo@smarttracker.local");
+  const [authPassword, setAuthPassword] = useState("demo1234");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   const statusCount = useMemo(() => {
     return tasks.reduce(
@@ -50,7 +62,10 @@ function App() {
     );
   }, [tasks]);
 
+  const isAuthenticated = currentUser !== null;
+
   async function loadTasks() {
+    if (!isAuthenticated) return;
     setLoading(true);
     setError("");
     try {
@@ -122,6 +137,7 @@ function App() {
   }
 
   async function loadInsights() {
+    if (!isAuthenticated) return;
     setInsightsLoading(true);
     setInsightsError("");
     try {
@@ -144,27 +160,124 @@ function App() {
 
   useEffect(() => {
     void loadTasks();
-  }, [filterStatus, filterDueBefore, filterDueAfter]);
+  }, [filterStatus, filterDueBefore, filterDueAfter, isAuthenticated]);
 
   useEffect(() => {
     void loadInsights();
+  }, [isAuthenticated]);
+
+  async function hydrateUserFromToken() {
+    if (!hasAuthToken()) return
+    try {
+      const me = await getMe();
+      setCurrentUser(me);
+    } catch {
+      setAuthToken("");
+      setCurrentUser(null);
+    }
+  }
+
+  useEffect(() => {
+    void hydrateUserFromToken();
   }, []);
+
+  async function handleAuthSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const result =
+        authMode === "login"
+          ? await login(authEmail.trim(), authPassword)
+          : await register(authEmail.trim(), authPassword);
+      setAuthToken(result.access_token);
+      setCurrentUser(result.user);
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Authentication failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    setAuthToken("");
+    setCurrentUser(null);
+    setTasks([]);
+    setDailySummary(null);
+    setWeeklyRetro(null);
+    setProductivity(null);
+    setPriority(null);
+  }
 
   return (
     <main className="app-shell">
       <header className="topbar">
         <h1>Smart Task Tracker</h1>
-        <p>FastAPI + React task dashboard</p>
+        <p>
+          FastAPI + React task dashboard
+          {currentUser ? ` | ${currentUser.email}` : ""}
+        </p>
       </header>
 
-      <section className="panel stats">
+      {!isAuthenticated ? (
+        <section className="panel">
+          <h2>{authMode === "login" ? "Login" : "Create account"}</h2>
+          <form className="task-form" onSubmit={handleAuthSubmit}>
+            <label>
+              Email
+              <input
+                type="email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                required
+              />
+            </label>
+            <div className="task-actions">
+              <button type="submit" disabled={authLoading}>
+                {authLoading ? "Please wait..." : authMode === "login" ? "Login" : "Register"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}
+              >
+                {authMode === "login" ? "Switch to register" : "Switch to login"}
+              </button>
+            </div>
+          </form>
+          {authError ? <p className="error">{authError}</p> : null}
+          <p className="muted">Demo account: demo@smarttracker.local / demo1234</p>
+        </section>
+      ) : null}
+
+      {isAuthenticated ? (
+        <>
+          <section className="panel">
+            <div className="list-head">
+              <h2>Session</h2>
+              <button type="button" className="danger" onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
+            <p className="muted">Your data is isolated to this account.</p>
+          </section>
+
+          <section className="panel stats">
         <div><strong>{tasks.length}</strong> total</div>
         <div><strong>{statusCount.todo}</strong> todo</div>
         <div><strong>{statusCount.in_progress}</strong> in progress</div>
         <div><strong>{statusCount.done}</strong> done</div>
-      </section>
+          </section>
 
-      <section className="panel">
+          <section className="panel">
         <h2>Filters</h2>
         <div className="filters">
           <label>
@@ -206,9 +319,9 @@ function App() {
             Clear filters
           </button>
         </div>
-      </section>
+          </section>
 
-      <section className="panel">
+          <section className="panel">
         <h2>Create task</h2>
         <form onSubmit={handleCreateTask} className="task-form">
           <label>
@@ -240,9 +353,9 @@ function App() {
             {creating ? "Creating..." : "Add task"}
           </button>
         </form>
-      </section>
+          </section>
 
-      <section className="panel">
+          <section className="panel">
         <div className="list-head">
           <h2>Tasks</h2>
           <button type="button" onClick={() => void loadTasks()} disabled={loading}>
@@ -285,9 +398,9 @@ function App() {
             </li>
           ))}
         </ul>
-      </section>
+          </section>
 
-      <section className="panel">
+          <section className="panel">
         <h2>Weekly retro</h2>
         {weeklyRetro ? (
           <div className="insight-block">
@@ -308,9 +421,9 @@ function App() {
         ) : (
           <p className="muted">No weekly retro data yet.</p>
         )}
-      </section>
+          </section>
 
-      <section className="panel">
+          <section className="panel">
         <div className="list-head">
           <h2>Daily summary</h2>
           <button type="button" onClick={() => void loadInsights()} disabled={insightsLoading}>
@@ -329,9 +442,9 @@ function App() {
         ) : (
           <p>No summary yet.</p>
         )}
-      </section>
+          </section>
 
-      <section className="panel">
+          <section className="panel">
         <h2>Productivity insights</h2>
         {productivity ? (
           <div className="insight-block">
@@ -367,7 +480,9 @@ function App() {
         ) : (
           <p className="muted">No overdue tasks right now.</p>
         )}
-      </section>
+          </section>
+        </>
+      ) : null}
     </main>
   );
 }
