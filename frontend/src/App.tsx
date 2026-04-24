@@ -13,6 +13,7 @@ import {
   login,
   listTasks,
   register,
+  resetDemoData,
   setAuthToken,
   updateTaskStatus,
 } from "./api";
@@ -51,6 +52,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [resettingDemo, setResettingDemo] = useState(false);
 
   const statusCount = useMemo(() => {
     return tasks.reduce(
@@ -63,6 +65,7 @@ function App() {
   }, [tasks]);
 
   const isAuthenticated = currentUser !== null;
+  const isDemoUser = currentUser?.email === "demo@smarttracker.local";
 
   async function loadTasks() {
     if (!isAuthenticated) return;
@@ -209,6 +212,20 @@ function App() {
     setPriority(null);
   }
 
+  async function handleResetDemo() {
+    setResettingDemo(true);
+    setError("");
+    try {
+      await resetDemoData();
+      await loadTasks();
+      await loadInsights();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reset demo data");
+    } finally {
+      setResettingDemo(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -263,11 +280,23 @@ function App() {
           <section className="panel">
             <div className="list-head">
               <h2>Session</h2>
-              <button type="button" className="danger" onClick={handleLogout}>
-                Logout
-              </button>
+              <div className="task-actions">
+                {isDemoUser ? (
+                  <button type="button" onClick={() => void handleResetDemo()} disabled={resettingDemo}>
+                    {resettingDemo ? "Resetting demo..." : "Reset demo data"}
+                  </button>
+                ) : null}
+                <button type="button" className="danger" onClick={handleLogout}>
+                  Logout
+                </button>
+              </div>
             </div>
             <p className="muted">Your data is isolated to this account.</p>
+            {isDemoUser ? (
+              <p className="muted">
+                Demo mode reset requires backend env: <code>DEMO_MODE=true</code>.
+              </p>
+            ) : null}
           </section>
 
           <section className="panel stats">

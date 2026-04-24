@@ -174,3 +174,9 @@ export async function login(email: string, password: string): Promise<AuthRespon
 export async function getMe(): Promise<AuthUser> {
   return request<AuthUser>("/auth/me");
 }
+
+export async function resetDemoData(): Promise<{ ok: boolean; seeded_tasks: number }> {
+  return request<{ ok: boolean; seeded_tasks: number }>("/demo/reset", {
+    method: "POST",
+  });
+}

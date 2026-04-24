@@ -49,3 +49,5 @@ npm run build
 
 - Email: `demo@smarttracker.local`
 - Password: `demo1234`
+- One-click demo reset button is available after login for this account.
+- Backend must set `DEMO_MODE=true` to allow reset.
