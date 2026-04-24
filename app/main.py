@@ -7,10 +7,12 @@ from app.auth import hash_password
 from app.database import Base, SessionLocal, engine, migrate_sqlite
 from app.models import Task, User
 from app.routes.auth import router as auth_router
+from app.routes.demo import router as demo_router
 from app.routes.insights import router as insights_router
 from app.routes.summary import router as summary_router
 from app.routes.tasks import router as tasks_router
 from app.services.category_guess import guess_category
+from app.services.demo_seed import reset_demo_dataset
 from app.scheduler import start_scheduler
 
 
@@ -43,6 +45,10 @@ async def lifespan(app: FastAPI):
         uncategorized = db.query(Task).filter(Task.category.is_(None)).all()
         for task in uncategorized:
             task.category = guess_category(task.title, task.description or "", task.due_date)
+        demo_task_count = db.query(Task).filter(Task.user_id == demo.id).count()
+        if demo_task_count == 0:
+            reset_demo_dataset(db, demo)
+
         if uncategorized or orphan_tasks:
             db.commit()
     finally:
@@ -65,6 +71,7 @@ app.include_router(tasks_router)
 app.include_router(summary_router)
 app.include_router(insights_router)
 app.include_router(auth_router)
+app.include_router(demo_router)
 
 
 @app.get("/")

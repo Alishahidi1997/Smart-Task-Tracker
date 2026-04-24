@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use a scheme without bcrypt's 72-byte password limit for new hashes,
+# while still allowing verification of older bcrypt hashes.
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt"],
+    deprecated="auto",
+)
 bearer_scheme = HTTPBearer(auto_error=True)
 
 JWT_SECRET = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
