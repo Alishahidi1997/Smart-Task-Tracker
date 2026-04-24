@@ -1,53 +1,46 @@
-# Smart Task Tracker Frontend
+# Smart Task Tracker (Frontend)
 
-React + TypeScript frontend for the FastAPI Smart Task Tracker backend.
+This is the React app for the Smart Task Tracker project.
+It talks to the FastAPI backend and gives you a simple dashboard for tasks + insights.
 
-## Prerequisites
+## Quick start
 
-- Node.js 20+
-- Backend API running at `http://127.0.0.1:8000`
-
-## Setup
+From the `frontend` folder:
 
 ```bash
 npm install
 copy .env.example .env
+npm run dev
 ```
 
-Default env:
+Open `http://localhost:5173`
+
+By default it calls:
 
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-## Run locally
+If your backend is running somewhere else, change that value in `.env`.
 
-```bash
-npm run dev
-```
+## What you can do in the app
 
-App URL: `http://localhost:5173`
+- Register/login (JWT auth)
+- Create, update, delete, and filter tasks
+- View daily AI summary
+- View productivity and priority insights
+- View weekly retro
+
+## Demo login
+
+- Email: `demo@smarttracker.local`
+- Password: `demo1234`
+
+There is a **Reset demo data** button for this account.
+It only works if backend has demo mode enabled (`DEMO_MODE=true`).
 
 ## Build
 
 ```bash
 npm run build
 ```
-
-## Features in this UI
-
-- Login/register with JWT auth
-- Logout and per-user data isolation
-- Task create/list/update/delete
-- Filters by status and due date window
-- Daily AI summary panel
-- Productivity insights panel
-- Priority suggestions panel
-- Weekly retro panel
-
-## Demo account
-
-- Email: `demo@smarttracker.local`
-- Password: `demo1234`
-- One-click demo reset button is available after login for this account.
-- Backend must set `DEMO_MODE=true` to allow reset.
