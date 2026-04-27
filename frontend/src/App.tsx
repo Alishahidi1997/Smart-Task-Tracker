@@ -18,6 +18,9 @@ import {
   setAuthToken,
   updateTaskStatus,
 } from "./api";
+import { AuthPanel } from "./components/AuthPanel";
+import { TaskComposerPanel } from "./components/TaskComposerPanel";
+import { TaskListPanel } from "./components/TaskListPanel";
 import type {
   AuthUser,
   DailySummaryResponse,
@@ -264,42 +267,17 @@ function App() {
       </header>
 
       {!isAuthenticated ? (
-        <section className="panel">
-          <h2>{authMode === "login" ? "Login" : "Create account"}</h2>
-          <form className="task-form" onSubmit={handleAuthSubmit}>
-            <label>
-              Email
-              <input
-                type="email"
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                required
-              />
-            </label>
-            <div className="task-actions">
-              <button type="submit" disabled={authLoading}>
-                {authLoading ? "Please wait..." : authMode === "login" ? "Login" : "Register"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}
-              >
-                {authMode === "login" ? "Switch to register" : "Switch to login"}
-              </button>
-            </div>
-          </form>
-          {authError ? <p className="error">{authError}</p> : null}
-          <p className="muted">Demo account: demo@smarttracker.local / demo1234</p>
-        </section>
+        <AuthPanel
+          authMode={authMode}
+          authEmail={authEmail}
+          authPassword={authPassword}
+          authLoading={authLoading}
+          authError={authError}
+          onSubmit={handleAuthSubmit}
+          onToggleMode={() => setAuthMode(authMode === "login" ? "register" : "login")}
+          onEmailChange={setAuthEmail}
+          onPasswordChange={setAuthPassword}
+        />
       ) : null}
 
       {isAuthenticated ? (
@@ -377,100 +355,32 @@ function App() {
         </div>
           </section>
 
-          <section className="panel">
-            <h2>AI task parser</h2>
-            <p className="muted">Write a natural sentence and auto-fill the form below.</p>
-            <div className="task-form">
-              <textarea
-                value={aiInput}
-                onChange={(e) => setAiInput(e.target.value)}
-                placeholder='Example: "Finish auth docs tomorrow at 5pm and prepare release notes"'
-              />
-              <button type="button" onClick={() => void handleAiParse()} disabled={aiLoading}>
-                {aiLoading ? "Parsing..." : "Parse with AI"}
-              </button>
-              {aiNote ? <p className="muted">{aiNote}</p> : null}
-            </div>
-          </section>
+          <TaskComposerPanel
+            aiInput={aiInput}
+            aiLoading={aiLoading}
+            aiNote={aiNote}
+            title={title}
+            description={description}
+            dueDate={dueDate}
+            creating={creating}
+            onAiInputChange={setAiInput}
+            onAiParse={handleAiParse}
+            onSubmit={handleCreateTask}
+            onTitleChange={setTitle}
+            onDescriptionChange={setDescription}
+            onDueDateChange={setDueDate}
+          />
 
-          <section className="panel">
-        <h2>Create task</h2>
-        <form onSubmit={handleCreateTask} className="task-form">
-          <label>
-            Title
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Finish API docs"
-              required
-            />
-          </label>
-          <label>
-            Description
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional details"
-            />
-          </label>
-          <label>
-            Due date
-            <input
-              type="datetime-local"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
-          </label>
-          <button type="submit" disabled={creating}>
-            {creating ? "Creating..." : "Add task"}
-          </button>
-        </form>
-          </section>
-
-          <section className="panel">
-        <div className="list-head">
-          <h2>Tasks</h2>
-          <button type="button" onClick={() => void loadTasks()} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-        {loading ? <p className="muted">Loading tasks...</p> : null}
-        {!loading && tasks.length === 0 ? <p className="muted">No tasks match your filters yet.</p> : null}
-        <ul className="task-list">
-          {tasks.map((task) => (
-            <li key={task.id}>
-              <div className="row">
-                <strong>{task.title}</strong>
-                <span className={`badge ${task.status}`}>{task.status}</span>
-              </div>
-              {task.description ? <p>{task.description}</p> : null}
-              <small>
-                category: {task.category ?? "n/a"} | due: {task.due_date ?? "n/a"}
-              </small>
-              <div className="task-actions">
-                <select
-                  value={task.status}
-                  onChange={(e) => void handleStatusChange(task.id, e.target.value as TaskStatus)}
-                  disabled={updatingTaskId === task.id}
-                >
-                  <option value="todo">todo</option>
-                  <option value="in_progress">in_progress</option>
-                  <option value="done">done</option>
-                </select>
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => void handleDeleteTask(task.id)}
-                  disabled={deletingTaskId === task.id}
-                >
-                  {deletingTaskId === task.id ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-          </section>
+          <TaskListPanel
+            tasks={tasks}
+            loading={loading}
+            error={error}
+            updatingTaskId={updatingTaskId}
+            deletingTaskId={deletingTaskId}
+            onRefresh={loadTasks}
+            onStatusChange={handleStatusChange}
+            onDeleteTask={handleDeleteTask}
+          />
 
           <section className="panel">
         <h2>Weekly retro</h2>
