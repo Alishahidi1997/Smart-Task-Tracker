@@ -12,9 +12,10 @@ class ParseTaskIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     text: str = Field(min_length=3, max_length=2000)
+    timezone: str | None = Field(default=None, max_length=100)
 
 
 @router.post("/parse-task")
 def parse_task(payload: ParseTaskIn, current_user: User = Depends(get_current_user)):
     _ = current_user
-    return parse_task_text(payload.text)
+    return parse_task_text(payload.text, payload.timezone)

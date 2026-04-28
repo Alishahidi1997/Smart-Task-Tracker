@@ -213,9 +213,10 @@ export async function loadDemoScenario(
 }
 
 export async function parseTaskText(text: string): Promise<ParsedTaskResponse> {
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   return request<ParsedTaskResponse>("/ai/parse-task", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, timezone: userTimezone }),
   });
 }
