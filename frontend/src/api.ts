@@ -131,6 +131,20 @@ export type DemoScenario = {
   description: string;
 };
 
+export type PlaybackSnapshot = {
+  at: string;
+  completion: number;
+  overdue_count: number;
+  cycle_time_hours: number | null;
+};
+
+export type PlaybackResponse = {
+  from: string;
+  to: string;
+  step: "day";
+  snapshots: PlaybackSnapshot[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const TOKEN_KEY = "smart_tracker_token";
 
@@ -263,6 +277,18 @@ export async function loadDemoScenario(
       method: "POST",
     },
   );
+}
+
+export async function getAnalyticsPlayback(params: {
+  from: string;
+  to: string;
+  step?: "day";
+}): Promise<PlaybackResponse> {
+  const query = new URLSearchParams();
+  query.set("from", params.from);
+  query.set("to", params.to);
+  query.set("step", params.step ?? "day");
+  return request<PlaybackResponse>(`/analytics/playback?${query.toString()}`);
 }
 
 export async function parseTaskText(text: string): Promise<ParsedTaskResponse> {

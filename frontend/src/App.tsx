@@ -11,6 +11,7 @@ import {
   getPrioritySuggestions,
   getProductivityInsights,
   getInsightExplanation,
+  getAnalyticsPlayback,
   listDemoScenarios,
   login,
   loadDemoScenario,
@@ -37,6 +38,7 @@ import type {
   ProductivityResponse,
   Task,
   TaskStatus,
+  PlaybackResponse,
   WeeklyRetroResponse,
 } from "./api";
 
@@ -88,6 +90,11 @@ function App() {
   const [agentExecuting, setAgentExecuting] = useState(false);
   const [agentActions, setAgentActions] = useState<AgentActionResult[]>([]);
   const [agentMessage, setAgentMessage] = useState("");
+  const [playback, setPlayback] = useState<PlaybackResponse | null>(null);
+  const [playbackLoading, setPlaybackLoading] = useState(false);
+  const [playbackError, setPlaybackError] = useState("");
+  const [playbackPresetDays, setPlaybackPresetDays] = useState<30 | 60 | 90>(30);
+  const [playbackCursor, setPlaybackCursor] = useState(0);
 
   const statusCount = useMemo(() => {
     return tasks.reduce(
@@ -127,6 +134,7 @@ function App() {
       await updateTaskStatus(taskId, nextStatus);
       await loadTasks();
       await loadInsights();
+      await loadPlayback(playbackPresetDays);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update task");
     } finally {
@@ -141,6 +149,7 @@ function App() {
       await deleteTask(taskId);
       await loadTasks();
       await loadInsights();
+      await loadPlayback(playbackPresetDays);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete task");
     } finally {
@@ -167,6 +176,7 @@ function App() {
       setDueDate("");
       await loadTasks();
       await loadInsights();
+      await loadPlayback(playbackPresetDays);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create task");
     } finally {
@@ -196,6 +206,35 @@ function App() {
     }
   }
 
+  function rangeForPreset(days: 30 | 60 | 90): { from: string; to: string } {
+    const now = new Date();
+    const to = now.toISOString();
+    const fromDate = new Date(now);
+    fromDate.setUTCDate(fromDate.getUTCDate() - (days - 1));
+    const from = fromDate.toISOString();
+    return { from, to };
+  }
+
+  async function loadPlayback(presetDays: 30 | 60 | 90 = playbackPresetDays) {
+    if (!isAuthenticated) return;
+    setPlaybackLoading(true);
+    setPlaybackError("");
+    try {
+      const range = rangeForPreset(presetDays);
+      const data = await getAnalyticsPlayback({
+        from: range.from,
+        to: range.to,
+        step: "day",
+      });
+      setPlayback(data);
+      setPlaybackCursor(Math.max(0, data.snapshots.length - 1));
+    } catch (err) {
+      setPlaybackError(err instanceof Error ? err.message : "Could not load KPI playback");
+    } finally {
+      setPlaybackLoading(false);
+    }
+  }
+
   useEffect(() => {
     void loadTasks();
   }, [filterStatus, filterDueBefore, filterDueAfter, isAuthenticated]);
@@ -203,6 +242,11 @@ function App() {
   useEffect(() => {
     void loadInsights();
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void loadPlayback(playbackPresetDays);
+  }, [isAuthenticated, playbackPresetDays]);
 
   async function hydrateUserFromToken() {
     if (!hasAuthToken()) return
@@ -254,6 +298,7 @@ function App() {
     setWeeklyRetro(null);
     setProductivity(null);
     setPriority(null);
+    setPlayback(null);
   }
 
   async function handleResetDemo() {
@@ -263,6 +308,7 @@ function App() {
       await resetDemoData();
       await loadTasks();
       await loadInsights();
+      await loadPlayback(playbackPresetDays);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reset demo data");
     } finally {
@@ -295,6 +341,7 @@ function App() {
       await loadDemoScenario(selectedScenarioId);
       await loadTasks();
       await loadInsights();
+      await loadPlayback(playbackPresetDays);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load demo scenario");
     } finally {
@@ -360,6 +407,7 @@ function App() {
       }
       await loadTasks();
       await loadInsights();
+      await loadPlayback(playbackPresetDays);
       setAiNote(`Created ${roadmapTasks.length} roadmap task(s).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create roadmap tasks");
@@ -406,6 +454,7 @@ function App() {
       setAgentMessage(response.assistant_message || "Command executed.");
       await loadTasks();
       await loadInsights();
+      await loadPlayback(playbackPresetDays);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not execute AI command");
     } finally {
@@ -628,6 +677,76 @@ function App() {
             onStatusChange={handleStatusChange}
             onDeleteTask={handleDeleteTask}
           />
+
+          <section className="panel">
+            <div className="list-head">
+              <h2>KPI playback</h2>
+              <button type="button" onClick={() => void loadPlayback(playbackPresetDays)} disabled={playbackLoading}>
+                {playbackLoading ? "Refreshing..." : "Refresh playback"}
+              </button>
+            </div>
+            <div className="task-actions">
+              <button
+                type="button"
+                onClick={() => setPlaybackPresetDays(30)}
+                disabled={playbackLoading || playbackPresetDays === 30}
+              >
+                Last 30 days
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlaybackPresetDays(60)}
+                disabled={playbackLoading || playbackPresetDays === 60}
+              >
+                Last 60 days
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlaybackPresetDays(90)}
+                disabled={playbackLoading || playbackPresetDays === 90}
+              >
+                Last 90 days
+              </button>
+            </div>
+            {playbackError ? <p className="error">{playbackError}</p> : null}
+            {playback?.snapshots?.length ? (
+              <>
+                <label>
+                  Timeline
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(0, playback.snapshots.length - 1)}
+                    value={playbackCursor}
+                    onChange={(e) => setPlaybackCursor(Number(e.target.value))}
+                    disabled={playbackLoading}
+                  />
+                </label>
+                <div className="insight-block">
+                  <small>
+                    {new Date(playback.snapshots[playbackCursor].at).toLocaleDateString()} | point{" "}
+                    {playbackCursor + 1}/{playback.snapshots.length}
+                  </small>
+                  <ul className="simple-list">
+                    <li>
+                      <strong>Completion:</strong> {playback.snapshots[playbackCursor].completion}
+                    </li>
+                    <li>
+                      <strong>Overdue count:</strong> {playback.snapshots[playbackCursor].overdue_count}
+                    </li>
+                    <li>
+                      <strong>Cycle time:</strong>{" "}
+                      {playback.snapshots[playbackCursor].cycle_time_hours === null
+                        ? "n/a"
+                        : `${playback.snapshots[playbackCursor].cycle_time_hours}h`}
+                    </li>
+                  </ul>
+                </div>
+              </>
+            ) : (
+              <p className="muted">{playbackLoading ? "Loading timeline..." : "No playback data yet."}</p>
+            )}
+          </section>
 
           <section className="panel">
         <h2>Weekly retro</h2>

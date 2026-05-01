@@ -7,6 +7,7 @@ from app.auth import hash_password
 from app.database import Base, SessionLocal, engine, migrate_sqlite
 from app.models import Task, User
 from app.routes.ai import router as ai_router
+from app.routes.analytics import router as analytics_router
 from app.routes.auth import router as auth_router
 from app.routes.demo import router as demo_router
 from app.routes.insights import router as insights_router
@@ -74,6 +75,7 @@ app.include_router(insights_router)
 app.include_router(auth_router)
 app.include_router(demo_router)
 app.include_router(ai_router)
+app.include_router(analytics_router)
 
 
 @app.get("/")
