@@ -11,6 +11,7 @@ import {
   getPrioritySuggestions,
   getProductivityInsights,
   getInsightExplanation,
+  getInsightAnomalies,
   getAnalyticsPlayback,
   listDemoScenarios,
   login,
@@ -39,6 +40,7 @@ import type {
   Task,
   TaskStatus,
   PlaybackResponse,
+  AnomaliesResponse,
   WeeklyRetroResponse,
 } from "./api";
 
@@ -95,6 +97,7 @@ function App() {
   const [playbackError, setPlaybackError] = useState("");
   const [playbackPresetDays, setPlaybackPresetDays] = useState<30 | 60 | 90>(30);
   const [playbackCursor, setPlaybackCursor] = useState(0);
+  const [anomalies, setAnomalies] = useState<AnomaliesResponse | null>(null);
 
   const statusCount = useMemo(() => {
     return tasks.reduce(
@@ -189,16 +192,19 @@ function App() {
     setInsightsLoading(true);
     setInsightsError("");
     try {
-      const [summaryData, weeklyRetroData, productivityData, priorityData] = await Promise.all([
-        getDailySummary(),
-        getWeeklyRetro(),
-        getProductivityInsights(),
-        getPrioritySuggestions(),
-      ]);
+      const [summaryData, weeklyRetroData, productivityData, priorityData, anomaliesData] =
+        await Promise.all([
+          getDailySummary(),
+          getWeeklyRetro(),
+          getProductivityInsights(),
+          getPrioritySuggestions(),
+          getInsightAnomalies(),
+        ]);
       setDailySummary(summaryData);
       setWeeklyRetro(weeklyRetroData);
       setProductivity(productivityData);
       setPriority(priorityData);
+      setAnomalies(anomaliesData);
     } catch (err) {
       setInsightsError(err instanceof Error ? err.message : "Could not load insights");
     } finally {
@@ -299,6 +305,7 @@ function App() {
     setProductivity(null);
     setPriority(null);
     setPlayback(null);
+    setAnomalies(null);
   }
 
   async function handleResetDemo() {
@@ -745,6 +752,41 @@ function App() {
               </>
             ) : (
               <p className="muted">{playbackLoading ? "Loading timeline..." : "No playback data yet."}</p>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2>Anomaly detection</h2>
+            <p className="muted">
+              Unusual spikes or drops in daily completions, overdue backlog, and cycle time vs a{" "}
+              {anomalies?.baseline_days ?? 7}-day rolling baseline (last {anomalies?.window_days ?? 30}{" "}
+              days). Sorted by impact.
+            </p>
+            {anomalies && anomalies.anomalies.length > 0 ? (
+              <ul className="simple-list">
+                {anomalies.anomalies.map((item) => (
+                  <li key={item.id}>
+                    <strong>
+                      {item.metric === "completion"
+                        ? "Completions"
+                        : item.metric === "overdue_count"
+                          ? "Overdue backlog"
+                          : "Cycle time"}
+                    </strong>{" "}
+                    {item.direction} on {new Date(item.date).toLocaleDateString()} — value{" "}
+                    <strong>{item.value}</strong> (baseline avg {item.baseline_mean}, z{" "}
+                    {item.z_score}) · confidence <strong>{item.confidence}</strong> · impact{" "}
+                    <strong>{item.impact}</strong>
+                    <p className="muted">{item.likely_cause}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">
+                {anomalies
+                  ? "No strong anomalies in this window. Need more day-to-day variance or history."
+                  : "Load insights to compute anomalies."}
+              </p>
             )}
           </section>
 

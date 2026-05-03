@@ -145,6 +145,27 @@ export type PlaybackResponse = {
   snapshots: PlaybackSnapshot[];
 };
 
+export type AnomalyItem = {
+  id: string;
+  date: string;
+  metric: "completion" | "overdue_count" | "cycle_time_hours";
+  direction: "spike" | "drop";
+  value: number;
+  baseline_mean: number;
+  z_score: number;
+  confidence: number;
+  likely_cause: string;
+  impact: number;
+};
+
+export type AnomaliesResponse = {
+  generated_at: string;
+  window_days: number;
+  baseline_days: number;
+  snapshots_used: number;
+  anomalies: AnomalyItem[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const TOKEN_KEY = "smart_tracker_token";
 
@@ -226,6 +247,17 @@ export async function getProductivityInsights(): Promise<ProductivityResponse> {
 
 export async function getPrioritySuggestions(): Promise<PriorityResponse> {
   return request<PriorityResponse>("/insights/priority");
+}
+
+export async function getInsightAnomalies(params?: {
+  days?: number;
+  baseline_days?: number;
+}): Promise<AnomaliesResponse> {
+  const query = new URLSearchParams();
+  if (params?.days != null) query.set("days", String(params.days));
+  if (params?.baseline_days != null) query.set("baseline_days", String(params.baseline_days));
+  const q = query.toString();
+  return request<AnomaliesResponse>(`/insights/anomalies${q ? `?${q}` : ""}`);
 }
 
 export async function getInsightExplanation(
