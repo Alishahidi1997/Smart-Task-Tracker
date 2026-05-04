@@ -16,6 +16,7 @@ import {
   listDemoScenarios,
   login,
   loadDemoScenario,
+  getPersonaDashboard,
   planTaskRoadmap,
   parseTaskText,
   runAgentCommand,
@@ -41,8 +42,83 @@ import type {
   TaskStatus,
   PlaybackResponse,
   AnomaliesResponse,
+  PersonaCard,
+  PersonaDashboardResponse,
+  PersonaRole,
   WeeklyRetroResponse,
 } from "./api";
+
+function PersonaCardBlock({ card }: { card: PersonaCard }) {
+  if (card.variant === "metric_row") {
+    return (
+      <div className="persona-metrics">
+        {card.metrics?.map((m) => (
+          <span key={m.label}>
+            <strong>{m.value}</strong> {m.label}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  if (card.variant === "text") {
+    return (
+      <>
+        <p>{card.body}</p>
+        {card.footnote ? <small className="muted">{card.footnote}</small> : null}
+      </>
+    );
+  }
+  if (card.variant === "bullets") {
+    const lines = card.items?.filter((x): x is string => typeof x === "string") ?? [];
+    return (
+      <ul className="simple-list">
+        {lines.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    );
+  }
+  if (card.variant === "key_value") {
+    const rows =
+      card.items?.filter(
+        (x): x is { key: string; value: number } =>
+          typeof x === "object" && x !== null && "key" in x,
+      ) ?? [];
+    return (
+      <ul className="simple-list">
+        {rows.map((row) => (
+          <li key={row.key}>
+            <strong>{row.key}</strong>: {row.value}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (card.variant === "table" && card.rows?.length) {
+    const cols = card.columns?.length ? card.columns : Object.keys(card.rows[0] ?? {});
+    return (
+      <table className="persona-table">
+        <thead>
+          <tr>
+            {cols.map((c) => (
+              <th key={c}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {card.rows.map((row, i) => (
+            <tr key={i}>
+              {cols.map((c) => (
+                <td key={c}>{String((row as Record<string, unknown>)[c] ?? "")}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+  return null;
+}
 
 function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -98,6 +174,10 @@ function App() {
   const [playbackPresetDays, setPlaybackPresetDays] = useState<30 | 60 | 90>(30);
   const [playbackCursor, setPlaybackCursor] = useState(0);
   const [anomalies, setAnomalies] = useState<AnomaliesResponse | null>(null);
+  const [personaRole, setPersonaRole] = useState<PersonaRole>("manager");
+  const [personaDash, setPersonaDash] = useState<PersonaDashboardResponse | null>(null);
+  const [personaLoading, setPersonaLoading] = useState(false);
+  const [personaError, setPersonaError] = useState("");
 
   const statusCount = useMemo(() => {
     return tasks.reduce(
@@ -254,6 +334,30 @@ function App() {
     void loadPlayback(playbackPresetDays);
   }, [isAuthenticated, playbackPresetDays]);
 
+  async function loadPersonaDashboard(role: PersonaRole = personaRole) {
+    if (!isAuthenticated || !isDemoUser) return;
+    setPersonaLoading(true);
+    setPersonaError("");
+    try {
+      const data = await getPersonaDashboard(role);
+      setPersonaDash(data);
+    } catch (err) {
+      setPersonaDash(null);
+      setPersonaError(err instanceof Error ? err.message : "Could not load persona dashboard");
+    } finally {
+      setPersonaLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isDemoUser) {
+      setPersonaDash(null);
+      setPersonaError("");
+      return;
+    }
+    void loadPersonaDashboard(personaRole);
+  }, [isDemoUser, personaRole]);
+
   async function hydrateUserFromToken() {
     if (!hasAuthToken()) return
     try {
@@ -306,6 +410,8 @@ function App() {
     setPriority(null);
     setPlayback(null);
     setAnomalies(null);
+    setPersonaDash(null);
+    setPersonaError("");
   }
 
   async function handleResetDemo() {
@@ -316,6 +422,7 @@ function App() {
       await loadTasks();
       await loadInsights();
       await loadPlayback(playbackPresetDays);
+      await loadPersonaDashboard(personaRole);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reset demo data");
     } finally {
@@ -349,6 +456,7 @@ function App() {
       await loadTasks();
       await loadInsights();
       await loadPlayback(playbackPresetDays);
+      await loadPersonaDashboard(personaRole);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load demo scenario");
     } finally {
@@ -555,6 +663,72 @@ function App() {
                   <p className="muted">
                     {demoScenarios.find((scenario) => scenario.id === selectedScenarioId)?.description}
                   </p>
+                ) : null}
+
+                <h3 className="persona-heading">Recruiter persona views</h3>
+                <p className="muted">
+                  Same underlying tasks; cards switch between operational (manager), analytical (analyst),
+                  and strategic (executive) lenses.
+                </p>
+                <div className="task-actions persona-toolbar">
+                  <label>
+                    View as
+                    <select
+                      value={personaRole}
+                      onChange={(e) => setPersonaRole(e.target.value as PersonaRole)}
+                      disabled={personaLoading}
+                    >
+                      <option value="manager">Manager — operational</option>
+                      <option value="analyst">Analyst — metrics</option>
+                      <option value="executive">Executive — strategic</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void loadPersonaDashboard(personaRole)}
+                    disabled={personaLoading}
+                  >
+                    {personaLoading ? "Loading..." : "Refresh view"}
+                  </button>
+                </div>
+                {personaError ? <p className="error">{personaError}</p> : null}
+                {personaLoading && !personaDash ? <p className="muted">Loading persona dashboard…</p> : null}
+                {personaDash ? (
+                  <div className="persona-dashboard">
+                    <p className="muted">{personaDash.tagline}</p>
+                    <p className="persona-meta muted">
+                      <span>{personaDash.lens}</span>
+                      <span>·</span>
+                      <span>{personaDash.shared.task_total} tasks</span>
+                      <span>·</span>
+                      <span>overdue open {personaDash.shared.overdue_open_total}</span>
+                    </p>
+                    {personaDash.headline ? (
+                      <p>
+                        <strong>{personaDash.headline}</strong>
+                      </p>
+                    ) : null}
+                    {personaDash.cards.map((c) => (
+                      <div key={c.id} className="insight-block">
+                        <strong>{c.title}</strong>
+                        <PersonaCardBlock card={c} />
+                      </div>
+                    ))}
+                    {personaDash.action_queue && personaDash.action_queue.length > 0 ? (
+                      <div className="insight-block">
+                        <strong>Action queue</strong>
+                        <ul className="simple-list">
+                          {personaDash.action_queue.map((a) => (
+                            <li key={a.task_id}>
+                              {a.title} ({a.priority}) — {a.hours_overdue}h overdue
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : !personaLoading && !personaError ? (
+                  <p className="muted">Persona data will load when demo mode is enabled on the API.</p>
                 ) : null}
               </>
             ) : null}

@@ -166,6 +166,47 @@ export type AnomaliesResponse = {
   anomalies: AnomalyItem[];
 };
 
+export type PersonaRole = "manager" | "analyst" | "executive";
+
+export type PersonaCard = {
+  id: string;
+  title: string;
+  variant: "metric_row" | "text" | "bullets" | "key_value" | "table";
+  metrics?: { label: string; value: number }[];
+  body?: string;
+  footnote?: string;
+  /** Bullet strings, or key/value rows depending on `variant`. */
+  items?: string[] | { key: string; value: number }[];
+  columns?: string[];
+  rows?: Record<string, unknown>[];
+};
+
+export type PersonaDashboardResponse = {
+  persona: PersonaRole;
+  generated_at: string;
+  lens: string;
+  tagline: string;
+  shared: {
+    task_total: number;
+    by_status: { todo: number; in_progress: number; done: number };
+    overdue_open_total: number;
+  };
+  cards: PersonaCard[];
+  action_queue?: Array<{
+    task_id: number;
+    title: string;
+    priority: string;
+    hours_overdue: number;
+  }>;
+  datasets?: {
+    status_breakdown?: Record<string, number>;
+    category_open_counts?: Record<string, number>;
+    productivity_buckets?: unknown[];
+  };
+  headline?: string;
+  weekly_metrics?: Record<string, unknown>;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const TOKEN_KEY = "smart_tracker_token";
 
@@ -308,6 +349,12 @@ export async function loadDemoScenario(
     {
       method: "POST",
     },
+  );
+}
+
+export async function getPersonaDashboard(role: PersonaRole): Promise<PersonaDashboardResponse> {
+  return request<PersonaDashboardResponse>(
+    `/demo/personas/${encodeURIComponent(role)}/dashboard`,
   );
 }
 
