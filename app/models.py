@@ -43,3 +43,14 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
+
+class NextActionFeedback(Base):
+    __tablename__ = "next_action_feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    feedback_key = Column(String(255), nullable=False)
+    action_type = Column(String(64), nullable=False)
+    outcome = Column(String(32), nullable=False)  # accepted | dismissed | completed
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+

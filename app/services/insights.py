@@ -272,3 +272,93 @@ def build_insight_explanation(insight_id, done_tasks, pending_tasks, guess_fn):
         }
 
     return None
+
+
+def _next_action_type(task, hours_overdue: float):
+    title = (getattr(task, "title", "") or "").lower()
+    if "contact" in title or "customer" in title or "client" in title:
+        return "contact_owner"
+    if hours_overdue >= 72:
+        return "escalate_risk"
+    if hours_overdue >= 36:
+        return "split_task"
+    return "reschedule"
+
+
+def _action_text(action_type: str, task):
+    if action_type == "contact_owner":
+        return f"Contact the owner for '{task.title}' and confirm a concrete recovery ETA."
+    if action_type == "escalate_risk":
+        return f"Escalate risk for '{task.title}' because delay is severe and likely impacts commitments."
+    if action_type == "split_task":
+        return f"Split '{task.title}' into a smaller deliverable and close one subtask today."
+    return f"Reschedule '{task.title}' with a realistic due date and mark the blocker in notes."
+
+
+def _learned_multiplier(action_type: str, feedback_rows):
+    accepted = 0
+    dismissed = 0
+    completed = 0
+    for row in feedback_rows:
+        if row.action_type != action_type:
+            continue
+        if row.outcome == "accepted":
+            accepted += 1
+        elif row.outcome == "dismissed":
+            dismissed += 1
+        elif row.outcome == "completed":
+            completed += 1
+
+    attempts = accepted + dismissed + completed
+    if attempts == 0:
+        return 1.0
+    success_rate = (completed + 0.5 * accepted) / attempts
+    penalty_rate = dismissed / attempts
+    # bounded adaptive multiplier so feedback nudges rank without overfitting
+    return max(0.75, min(1.35, 1.0 + 0.45 * (success_rate - penalty_rate)))
+
+
+def build_next_actions(tasks, feedback_rows, guess_fn):
+    now = datetime.now(timezone.utc)
+    rows = []
+    for task in tasks:
+        due_utc = _as_utc(getattr(task, "due_date", None))
+        if due_utc is None:
+            continue
+        if due_utc >= now:
+            continue
+        if getattr(task, "status", "") == "done":
+            continue
+
+        overdue_hours = round((now - due_utc).total_seconds() / 3600.0, 2)
+        action_type = _next_action_type(task, overdue_hours)
+        base_impact = overdue_hours * (1.4 if action_type == "escalate_risk" else 1.0)
+        learned = _learned_multiplier(action_type, feedback_rows)
+        rank_score = round(base_impact * learned, 3)
+        feedback_key = f"{action_type}:{task.id}"
+        rows.append(
+            {
+                "id": feedback_key,
+                "task_id": task.id,
+                "task_title": task.title,
+                "category": _bucket_for_task(task, guess_fn),
+                "hours_overdue": overdue_hours,
+                "action_type": action_type,
+                "action": _action_text(action_type, task),
+                "rank_score": rank_score,
+                "feedback_key": feedback_key,
+                "learned_multiplier": round(learned, 3),
+            }
+        )
+
+    rows.sort(key=lambda row: row["rank_score"], reverse=True)
+    top = rows[:20]
+    return {
+        "generated_at": now.isoformat(),
+        "suggestion": (
+            "Top actions are ranked by overdue impact and adjusted using your historical outcomes "
+            "(accepted, dismissed, completed)."
+        ),
+        "total_candidates": len(rows),
+        "actions": top,
+    }

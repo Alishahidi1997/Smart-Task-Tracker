@@ -59,6 +59,18 @@ def migrate_sqlite(engine):
             conn.execute(text("ALTER TABLE daily_summaries ADD COLUMN user_id INTEGER"))
             conn.execute(text("UPDATE daily_summaries SET user_id = 1 WHERE user_id IS NULL"))
 
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS next_action_feedback ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "user_id INTEGER NOT NULL, "
+                "feedback_key VARCHAR(255) NOT NULL, "
+                "action_type VARCHAR(64) NOT NULL, "
+                "outcome VARCHAR(32) NOT NULL, "
+                "created_at DATETIME NOT NULL)"
+            )
+        )
+
 
 def get_db():
     db = SessionLocal()

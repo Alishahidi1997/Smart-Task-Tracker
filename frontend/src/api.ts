@@ -166,6 +166,28 @@ export type AnomaliesResponse = {
   anomalies: AnomalyItem[];
 };
 
+export type NextActionOutcome = "accepted" | "dismissed" | "completed";
+
+export type NextActionItem = {
+  id: string;
+  task_id: number;
+  task_title: string;
+  category: string;
+  hours_overdue: number;
+  action_type: string;
+  action: string;
+  rank_score: number;
+  feedback_key: string;
+  learned_multiplier: number;
+};
+
+export type NextActionsResponse = {
+  generated_at: string;
+  suggestion: string;
+  total_candidates: number;
+  actions: NextActionItem[];
+};
+
 export type PersonaRole = "manager" | "analyst" | "executive";
 
 export type PersonaCard = {
@@ -299,6 +321,60 @@ export async function getInsightAnomalies(params?: {
   if (params?.baseline_days != null) query.set("baseline_days", String(params.baseline_days));
   const q = query.toString();
   return request<AnomaliesResponse>(`/insights/anomalies${q ? `?${q}` : ""}`);
+}
+
+export async function getNextActions(): Promise<NextActionsResponse> {
+  return request<NextActionsResponse>("/insights/next-actions");
+}
+
+export async function recordNextActionOutcome(
+  feedbackKey: string,
+  outcome: NextActionOutcome,
+): Promise<{ ok: boolean; feedback_id: number; feedback_key: string; outcome: NextActionOutcome }> {
+  return request<{ ok: boolean; feedback_id: number; feedback_key: string; outcome: NextActionOutcome }>(
+    "/insights/next-actions/outcome",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feedback_key: feedbackKey, outcome }),
+    },
+  );
+}
+
+export type ActionOutcomeBreakdown = {
+  total: number;
+  accepted: number;
+  dismissed: number;
+  completed: number;
+  positive_rate: number;
+};
+
+export type ActionOutcomesResponse = {
+  generated_at: string;
+  window_days: number;
+  totals: {
+    all: number;
+    accepted: number;
+    dismissed: number;
+    completed: number;
+    overall_positive_rate: number;
+  };
+  by_action_type: Record<string, ActionOutcomeBreakdown>;
+  summary: string;
+  recent: Array<{
+    id: number;
+    action_type: string;
+    outcome: string;
+    feedback_key: string;
+    created_at: string | null;
+  }>;
+};
+
+export async function getNextActionOutcomes(days?: number): Promise<ActionOutcomesResponse> {
+  const query = new URLSearchParams();
+  if (days != null) query.set("days", String(days));
+  const q = query.toString();
+  return request<ActionOutcomesResponse>(`/insights/next-actions/outcomes${q ? `?${q}` : ""}`);
 }
 
 export async function getInsightExplanation(

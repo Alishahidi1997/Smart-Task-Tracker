@@ -12,6 +12,9 @@ import {
   getProductivityInsights,
   getInsightExplanation,
   getInsightAnomalies,
+  getNextActions,
+  recordNextActionOutcome,
+  getNextActionOutcomes,
   getAnalyticsPlayback,
   listDemoScenarios,
   login,
@@ -42,6 +45,9 @@ import type {
   TaskStatus,
   PlaybackResponse,
   AnomaliesResponse,
+  NextActionsResponse,
+  NextActionOutcome,
+  ActionOutcomesResponse,
   PersonaCard,
   PersonaDashboardResponse,
   PersonaRole,
@@ -174,6 +180,9 @@ function App() {
   const [playbackPresetDays, setPlaybackPresetDays] = useState<30 | 60 | 90>(30);
   const [playbackCursor, setPlaybackCursor] = useState(0);
   const [anomalies, setAnomalies] = useState<AnomaliesResponse | null>(null);
+  const [nextActions, setNextActions] = useState<NextActionsResponse | null>(null);
+  const [actionOutcomes, setActionOutcomes] = useState<ActionOutcomesResponse | null>(null);
+  const [updatingNextActionKey, setUpdatingNextActionKey] = useState<string | null>(null);
   const [personaRole, setPersonaRole] = useState<PersonaRole>("manager");
   const [personaDash, setPersonaDash] = useState<PersonaDashboardResponse | null>(null);
   const [personaLoading, setPersonaLoading] = useState(false);
@@ -272,19 +281,30 @@ function App() {
     setInsightsLoading(true);
     setInsightsError("");
     try {
-      const [summaryData, weeklyRetroData, productivityData, priorityData, anomaliesData] =
-        await Promise.all([
-          getDailySummary(),
-          getWeeklyRetro(),
-          getProductivityInsights(),
-          getPrioritySuggestions(),
-          getInsightAnomalies(),
-        ]);
+      const [
+        summaryData,
+        weeklyRetroData,
+        productivityData,
+        priorityData,
+        anomaliesData,
+        nextActionsData,
+        outcomesData,
+      ] = await Promise.all([
+        getDailySummary(),
+        getWeeklyRetro(),
+        getProductivityInsights(),
+        getPrioritySuggestions(),
+        getInsightAnomalies(),
+        getNextActions(),
+        getNextActionOutcomes(90),
+      ]);
       setDailySummary(summaryData);
       setWeeklyRetro(weeklyRetroData);
       setProductivity(productivityData);
       setPriority(priorityData);
       setAnomalies(anomaliesData);
+      setNextActions(nextActionsData);
+      setActionOutcomes(outcomesData);
     } catch (err) {
       setInsightsError(err instanceof Error ? err.message : "Could not load insights");
     } finally {
@@ -410,6 +430,8 @@ function App() {
     setPriority(null);
     setPlayback(null);
     setAnomalies(null);
+    setNextActions(null);
+    setActionOutcomes(null);
     setPersonaDash(null);
     setPersonaError("");
   }
@@ -541,6 +563,19 @@ function App() {
       setError(err instanceof Error ? err.message : "Could not load insight explanation");
     } finally {
       setExplainingInsightId(null);
+    }
+  }
+
+  async function handleNextActionOutcome(feedbackKey: string, outcome: NextActionOutcome) {
+    setUpdatingNextActionKey(feedbackKey);
+    setError("");
+    try {
+      await recordNextActionOutcome(feedbackKey, outcome);
+      await loadInsights();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update next-action outcome");
+    } finally {
+      setUpdatingNextActionKey(null);
     }
   }
 
@@ -961,6 +996,124 @@ function App() {
                   ? "No strong anomalies in this window. Need more day-to-day variance or history."
                   : "Load insights to compute anomalies."}
               </p>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2>Next best actions</h2>
+            {nextActions ? (
+              <div className="insight-block">
+                <p>{nextActions.suggestion}</p>
+                <small>candidates: {nextActions.total_candidates}</small>
+                {nextActions.actions.length > 0 ? (
+                  <ul className="simple-list">
+                    {nextActions.actions.slice(0, 8).map((item) => (
+                      <li key={item.id}>
+                        <p>
+                          <strong>{item.action_type}</strong> - {item.action}
+                        </p>
+                        <small>
+                          task: {item.task_title} | overdue: {item.hours_overdue}h | score:{" "}
+                          {item.rank_score} | learned x{item.learned_multiplier}
+                        </small>
+                        <div className="task-actions">
+                          <button
+                            type="button"
+                            onClick={() => void handleNextActionOutcome(item.feedback_key, "accepted")}
+                            disabled={updatingNextActionKey === item.feedback_key}
+                          >
+                            accepted
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleNextActionOutcome(item.feedback_key, "dismissed")}
+                            disabled={updatingNextActionKey === item.feedback_key}
+                          >
+                            dismissed
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleNextActionOutcome(item.feedback_key, "completed")}
+                            disabled={updatingNextActionKey === item.feedback_key}
+                          >
+                            completed
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">No actionable overdue work right now.</p>
+                )}
+              </div>
+            ) : (
+              <p className="muted">Loading next actions...</p>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2>Action outcome trends</h2>
+            <p className="muted">
+              Feedback you record on next-best actions (last {actionOutcomes?.window_days ?? 90} days) feeds ranking.
+            </p>
+            {actionOutcomes ? (
+              <div className="insight-block">
+                <p>{actionOutcomes.summary}</p>
+                <small>
+                  events: {actionOutcomes.totals.all} · accepted {actionOutcomes.totals.accepted} · dismissed{" "}
+                  {actionOutcomes.totals.dismissed} · completed {actionOutcomes.totals.completed} · overall positive rate{" "}
+                  {(actionOutcomes.totals.overall_positive_rate * 100).toFixed(1)}%
+                </small>
+                {Object.keys(actionOutcomes.by_action_type).length > 0 ? (
+                  <table className="persona-table">
+                    <thead>
+                      <tr>
+                        <th>Action type</th>
+                        <th>Total</th>
+                        <th>Accepted</th>
+                        <th>Dismissed</th>
+                        <th>Completed</th>
+                        <th>Positive rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(actionOutcomes.by_action_type).map(([type, row]) => (
+                        <tr key={type}>
+                          <td>{type}</td>
+                          <td>{row.total}</td>
+                          <td>{row.accepted}</td>
+                          <td>{row.dismissed}</td>
+                          <td>{row.completed}</td>
+                          <td>{(row.positive_rate * 100).toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="muted">No breakdown yet.</p>
+                )}
+                {actionOutcomes.recent.length > 0 ? (
+                  <>
+                    <strong>Recent feedback</strong>
+                    <ul className="simple-list">
+                      {actionOutcomes.recent.map((ev) => (
+                        <li key={ev.id}>
+                          <strong>{ev.action_type}</strong> → {ev.outcome}
+                          {ev.created_at ? (
+                            <span className="muted">
+                              {" "}
+                              ({new Date(ev.created_at).toLocaleString()})
+                            </span>
+                          ) : null}
+                          <div className="muted">{ev.feedback_key}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+              </div>
+            ) : (
+              <p className="muted">Loading outcome trends...</p>
             )}
           </section>
 
