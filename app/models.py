@@ -54,3 +54,17 @@ class NextActionFeedback(Base):
     outcome = Column(String(32), nullable=False)  # accepted | dismissed | completed
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    request_text = Column(Text, nullable=False)
+    tool_name = Column(String(64), nullable=True)
+    arguments = Column(Text, nullable=True)
+    validation_result = Column(String(32), nullable=False, default="unknown")
+    execution_result = Column(String(32), nullable=False, default="unknown")
+    user_id = Column(Integer, nullable=False, default=1)
+    tenant_id = Column(String(128), nullable=False, default="default")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+

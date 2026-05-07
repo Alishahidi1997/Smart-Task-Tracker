@@ -71,6 +71,21 @@ def migrate_sqlite(engine):
             )
         )
 
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS audit_logs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "request_text TEXT NOT NULL, "
+                "tool_name VARCHAR(64), "
+                "arguments TEXT, "
+                "validation_result VARCHAR(32) NOT NULL, "
+                "execution_result VARCHAR(32) NOT NULL, "
+                "user_id INTEGER NOT NULL, "
+                "tenant_id VARCHAR(128) NOT NULL, "
+                "created_at DATETIME NOT NULL)"
+            )
+        )
+
 
 def get_db():
     db = SessionLocal()
