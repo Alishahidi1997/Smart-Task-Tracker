@@ -29,11 +29,24 @@ def migrate_sqlite(engine):
             text(
                 "CREATE TABLE IF NOT EXISTS users ("
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "slack_user_id VARCHAR(64), "
                 "email VARCHAR(255) NOT NULL UNIQUE, "
                 "password_hash VARCHAR(255) NOT NULL, "
+                "role VARCHAR(64) NOT NULL DEFAULT 'employee', "
+                "tenant_id VARCHAR(128) NOT NULL DEFAULT 'default', "
                 "created_at DATETIME NOT NULL)"
             )
         )
+        user_rows = conn.execute(text("PRAGMA table_info(users)")).fetchall()
+        user_cols = {r[1] for r in user_rows}
+        if "slack_user_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN slack_user_id VARCHAR(64)"))
+        if "role" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(64)"))
+            conn.execute(text("UPDATE users SET role = 'employee' WHERE role IS NULL OR role = ''"))
+        if "tenant_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(128)"))
+            conn.execute(text("UPDATE users SET tenant_id = 'default' WHERE tenant_id IS NULL OR tenant_id = ''"))
 
         rows = conn.execute(text("PRAGMA table_info(tasks)")).fetchall()
         col_names = {r[1] for r in rows}

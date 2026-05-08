@@ -39,8 +39,11 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    slack_user_id = Column(String(64), nullable=True, unique=True)
     email = Column(String(255), nullable=False, unique=True)
     password_hash = Column(String(255), nullable=False)
+    role = Column(String(64), nullable=False, default="employee")
+    tenant_id = Column(String(128), nullable=False, default="default")
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 
