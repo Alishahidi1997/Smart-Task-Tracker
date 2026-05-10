@@ -6,6 +6,14 @@ This document is aligned to the backend-only architecture in `project.md`.
 
 ---
 
+## Implementation posture (junior+ / early mid)
+
+This project is intentionally implemented at a **junior+ to early mid** architecture level: **solid fundamentals** (clear layering, validation before execution, audit trails, shared resources via FastAPI lifespan / `Depends`), **pragmatic** use of middleware and optional infrastructure (logging, Redis when configured, streaming where it helps UX), and **readable code paths** that a teammate can follow without a map.
+
+That posture explicitly **avoids** premature complexity—extra abstraction layers “because enterprise,” unused patterns, or splitting into many tiny services before there is a concrete need. When trade-offs appear, prefer **clarity and maintainability** over cleverness, and grow structure only when the codebase proves it needs it.
+
+---
+
 ## 1. System scope
 
 - Backend orchestration platform only.

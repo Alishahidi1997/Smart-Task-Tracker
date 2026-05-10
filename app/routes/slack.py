@@ -2,9 +2,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+import httpx
 
 from app.database import get_db
-from app.llm.openai_client import plan_tool_call
+from app.deps import get_http_client
+from app.llm.openai_client import plan_tool_call_async
 from app.models import User
 from app.orchestration.prompt_builder import build_planner_system_prompt
 from app.orchestration.tool_registry import filter_tools, tool_schema_map
@@ -17,7 +19,11 @@ router = APIRouter(prefix="/slack", tags=["slack"])
 
 
 @router.post("/events")
-async def slack_events(request: Request, db: Session = Depends(get_db)):
+async def slack_events(
+    request: Request,
+    db: Session = Depends(get_db),
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+):
     raw = await request.body()
     verify_slack_signature(
         timestamp=request.headers.get("X-Slack-Request-Timestamp"),
@@ -60,7 +66,7 @@ async def slack_events(request: Request, db: Session = Depends(get_db)):
         "timestamp": ts or datetime.utcnow().timestamp(),
     }
     try:
-        planner_raw = plan_tool_call(planner_prompt, text)
+        planner_raw = await plan_tool_call_async(http_client, planner_prompt, text)
         validated_plan = validate_planner_output(
             planner_raw,
             tool_schemas=tool_schema_map(),
