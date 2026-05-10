@@ -1,9 +1,12 @@
+import os
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import hash_password
+from app.middleware.request_logging import RequestLoggingMiddleware
 from app.database import Base, SessionLocal, engine, migrate_sqlite
 from app.models import Task, User
 from app.routes.ai import router as ai_router
@@ -58,9 +61,25 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    app.state.http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(45.0),
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+    )
+    redis_url = os.getenv("REDIS_URL", "").strip()
+    if redis_url:
+        import redis.asyncio as redis_async
+
+        app.state.redis = redis_async.from_url(redis_url, decode_responses=True)
+    else:
+        app.state.redis = None
+
     scheduler = start_scheduler()
     yield
     scheduler.shutdown(wait=False)
+
+    await app.state.http_client.aclose()
+    if getattr(app.state, "redis", None) is not None:
+        await app.state.redis.aclose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -71,6 +90,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 app.include_router(tasks_router)
 app.include_router(summary_router)
 app.include_router(insights_router)

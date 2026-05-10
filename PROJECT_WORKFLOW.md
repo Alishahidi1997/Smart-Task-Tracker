@@ -6,6 +6,14 @@ This document is aligned to the backend-only architecture in `project.md`.
 
 ---
 
+## Implementation posture (junior+ / early mid)
+
+This project is intentionally implemented at a **junior+ to early mid** architecture level: **solid fundamentals** (clear layering, validation before execution, audit trails, shared resources via FastAPI lifespan / `Depends`), **pragmatic** use of middleware and optional infrastructure (logging, Redis when configured, streaming where it helps UX), and **readable code paths** that a teammate can follow without a map.
+
+That posture explicitly **avoids** premature complexity—extra abstraction layers “because enterprise,” unused patterns, or splitting into many tiny services before there is a concrete need. When trade-offs appear, prefer **clarity and maintainability** over cleverness, and grow structure only when the codebase proves it needs it.
+
+---
+
 ## 1. System scope
 
 - Backend orchestration platform only.
@@ -164,6 +172,14 @@ Requires:
 ### AI (`/ai`)
 
 Protected routes that use OpenAI when configured (see route implementations and `app/services/*`). Typical uses: natural language task parse, roadmap planning, agent-style commands with tool calls. The frontend exposes these in the composer and “AI Command Console”.
+
+### Slack (`/slack`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/slack/events` | Slack Events API: verifies Slack signing secret (unless dev bypass env), normalizes event, maps Slack user → internal user, planner → structured validation → policy → **trusted execution** (`app/services/slack_execution.py`) → `audit_logs` row. Returns JSON including `status`: `executed`, `clarification_required`, `policy_rejected`, `execution_failed`, etc., and `audit_id` when an audit row was written. |
+
+Execution respects tenant isolation by scoping task queries to `user_id`. Assignee on tasks is persisted via `description` lines (`Assignee: …`) because the MVP task schema does not include a dedicated assignee column.
 
 ---
 

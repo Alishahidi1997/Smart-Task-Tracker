@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
+from app.llm.openai_client import stream_chat_completion_text
+
 from app.models import Task
 from app.services.category_guess import guess_category
 
@@ -105,10 +107,14 @@ def _authorize(identity_ctx: dict, tool_name: str, args):
         raise PermissionError("due_date cannot be in the past")
 
 
-def _llm_plan(message: str, identity_ctx: dict, source: str, conversation_id: str | None):
+def _api_key_header() -> dict[str, str]:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
+    return {"Authorization": "Bearer " + api_key, "Content-Type": "application/json"}
+
+
+def _chat_planner_openai_payload(message: str, identity_ctx: dict, source: str, conversation_id: str | None) -> dict:
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
     registry = _tool_registry()
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -123,7 +129,7 @@ def _llm_plan(message: str, identity_ctx: dict, source: str, conversation_id: st
         f"tool_registry={json.dumps(registry)}\n"
         f"request={message}"
     )
-    payload = {
+    return {
         "model": model,
         "messages": [
             {"role": "system", "content": system_text},
@@ -133,20 +139,61 @@ def _llm_plan(message: str, identity_ctx: dict, source: str, conversation_id: st
         "max_tokens": 350,
         "response_format": {"type": "json_object"},
     }
-    with httpx.Client(timeout=45.0) as client:
-        resp = client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json"},
-            json=payload,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+
+
+async def _llm_plan_async(
+    client: httpx.AsyncClient, message: str, identity_ctx: dict, source: str, conversation_id: str | None
+):
+    payload = _chat_planner_openai_payload(message, identity_ctx, source, conversation_id)
+    response = await client.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers=_api_key_header(),
+        json=payload,
+    )
+    response.raise_for_status()
+    data = response.json()
     content = (data.get("choices") or [{}])[0].get("message", {}).get("content") or "{}"
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
         raise ValueError("invalid JSON from planner") from exc
     return PlannerOutput(**parsed), parsed
+
+
+def _complete_after_plan(
+    planner_output: PlannerOutput, raw_output: dict, identity_ctx: dict, current_user, db
+):
+    if planner_output.missing_required:
+        return {
+            "status": "clarification_required",
+            "question": planner_output.clarification_question
+            or f"Missing required fields: {', '.join(planner_output.missing_required)}",
+            "planner_output": planner_output.model_dump(),
+            "identity": identity_ctx,
+            "raw_planner_output": raw_output,
+        }
+    if planner_output.confidence < 0.35:
+        return {
+            "status": "clarification_required",
+            "question": planner_output.clarification_question
+            or "I need more detail before I can execute this request safely.",
+            "planner_output": planner_output.model_dump(),
+            "identity": identity_ctx,
+            "raw_planner_output": raw_output,
+        }
+    try:
+        validated_args = _validate_tool_output(planner_output)
+    except (ValidationError, ValueError) as exc:
+        raise ValueError(f"validation failed: {exc}") from exc
+    _authorize(identity_ctx, planner_output.tool_name, validated_args)
+    result = _execute(planner_output.tool_name, validated_args, current_user, db)
+    return {
+        "status": "executed",
+        "result": result,
+        "planner_output": planner_output.model_dump(),
+        "identity": identity_ctx,
+        "raw_planner_output": raw_output,
+    }
 
 
 def _execute(tool_name: str, args, current_user, db):
@@ -194,37 +241,43 @@ def _execute(tool_name: str, args, current_user, db):
     return {"tool_name": tool_name, "task_id": args.task_id, "status": "deleted"}
 
 
-def orchestrate_chat(message: str, source: str, conversation_id: str | None, current_user, db):
+async def orchestrate_chat(
+    message: str,
+    source: str,
+    conversation_id: str | None,
+    current_user,
+    db,
+    http_client: httpx.AsyncClient,
+):
     identity_ctx = _build_identity_context(current_user)
-    planner_output, raw_output = _llm_plan(message, identity_ctx, source, conversation_id)
-    if planner_output.missing_required:
-        return {
-            "status": "clarification_required",
-            "question": planner_output.clarification_question
-            or f"Missing required fields: {', '.join(planner_output.missing_required)}",
-            "planner_output": planner_output.model_dump(),
-            "identity": identity_ctx,
-            "raw_planner_output": raw_output,
-        }
-    if planner_output.confidence < 0.35:
-        return {
-            "status": "clarification_required",
-            "question": planner_output.clarification_question
-            or "I need more detail before I can execute this request safely.",
-            "planner_output": planner_output.model_dump(),
-            "identity": identity_ctx,
-            "raw_planner_output": raw_output,
-        }
+    planner_output, raw_output = await _llm_plan_async(
+        http_client, message, identity_ctx, source, conversation_id
+    )
+    return _complete_after_plan(planner_output, raw_output, identity_ctx, current_user, db)
+
+
+async def orchestrate_chat_stream(
+    message: str,
+    source: str,
+    conversation_id: str | None,
+    current_user,
+    db,
+    http_client: httpx.AsyncClient,
+):
+    """SSE-style stream: start → planner_token chunks → final result object."""
+    identity_ctx = _build_identity_context(current_user)
+    yield {"event": "start", "identity": identity_ctx}
+    payload = _chat_planner_openai_payload(message, identity_ctx, source, conversation_id)
+    buf: list[str] = []
+    async for delta in stream_chat_completion_text(http_client, payload):
+        buf.append(delta)
+        yield {"event": "planner_token", "text": delta}
+    content = "".join(buf)
     try:
-        validated_args = _validate_tool_output(planner_output)
-    except (ValidationError, ValueError) as exc:
-        raise ValueError(f"validation failed: {exc}") from exc
-    _authorize(identity_ctx, planner_output.tool_name, validated_args)
-    result = _execute(planner_output.tool_name, validated_args, current_user, db)
-    return {
-        "status": "executed",
-        "result": result,
-        "planner_output": planner_output.model_dump(),
-        "identity": identity_ctx,
-        "raw_planner_output": raw_output,
-    }
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        yield {"event": "error", "detail": "invalid JSON from planner"}
+        raise ValueError("invalid JSON from planner") from exc
+    planner_output = PlannerOutput(**parsed)
+    result = _complete_after_plan(planner_output, parsed, identity_ctx, current_user, db)
+    yield {"event": "result", **result}
