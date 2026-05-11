@@ -71,3 +71,23 @@ class AuditLog(Base):
     tenant_id = Column(String(128), nullable=False, default="default")
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
+
+class SlackOrchestrationTrace(Base):
+    """Structured timing spans and metrics for POST /slack/events (beyond flat audit_logs rows)."""
+
+    __tablename__ = "slack_orchestration_traces"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    trace_id = Column(String(36), nullable=False, unique=True, index=True)
+    audit_log_id = Column(Integer, nullable=True)
+    user_id = Column(Integer, nullable=True)
+    tenant_id = Column(String(128), nullable=False, default="default")
+    slack_channel_id = Column(String(64), nullable=True)
+    slack_message_ts = Column(String(32), nullable=True)
+    slack_user_id = Column(String(64), nullable=True)
+    outcome = Column(String(64), nullable=False)
+    total_duration_ms = Column(Integer, nullable=False)
+    spans_json = Column(Text, nullable=False)
+    metrics_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
