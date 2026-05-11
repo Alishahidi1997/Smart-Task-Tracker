@@ -99,6 +99,25 @@ def migrate_sqlite(engine):
             )
         )
 
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS slack_orchestration_traces ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "trace_id VARCHAR(36) NOT NULL UNIQUE, "
+                "audit_log_id INTEGER, "
+                "user_id INTEGER, "
+                "tenant_id VARCHAR(128) NOT NULL, "
+                "slack_channel_id VARCHAR(64), "
+                "slack_message_ts VARCHAR(32), "
+                "slack_user_id VARCHAR(64), "
+                "outcome VARCHAR(64) NOT NULL, "
+                "total_duration_ms INTEGER NOT NULL, "
+                "spans_json TEXT NOT NULL, "
+                "metrics_json TEXT, "
+                "created_at DATETIME NOT NULL)"
+            )
+        )
+
 
 def get_db():
     db = SessionLocal()
