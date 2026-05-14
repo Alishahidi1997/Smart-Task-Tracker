@@ -2,15 +2,7 @@
 
 This project is a **FastAPI backend** (plus a small **React** UI in `frontend/`) built around a simple idea: people should be able to talk to software in natural language, but **the server should still own the database**. The model’s job is to pick a structured action and fill in fields; your code checks it, applies policy, runs the real insert/update/delete, and writes an audit row.
 
-<<<<<<< HEAD
-You also get normal REST for tasks, JWT login, daily summaries, and a pile of insight endpoints if you want charts or demos without touching an LLM.
-=======
-**the model suggests a tool and arguments; the server decides if that is allowed and then runs the real code.** Nothing hits the database on trust alone.
 
-If you care about the full architecture write-up, it lives in `project.md`. Note: some clones list `project.md` in `.gitignore`, so you might not see it until you add or restore that file locally.
->>>>>>> 22d11f8a8d1548858edfc82e034593896a44ba02
-
----
 
 ## What you need
 
